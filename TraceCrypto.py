@@ -1,32 +1,33 @@
 import numpy as np
 import time
 import requests
+import argparse
 
-def get_current_price(crypto, base_currency):
-    # First source: CoinGecko API
-    url_coingecko = f'https://api.coingecko.com/api/v3/simple/price'
-    params_coingecko = {
-        'ids': crypto,
-        'vs_currencies': base_currency
-    }
-    response = requests.get(url_coingecko, params=params_coingecko)
-    if response.status_code == 200:
-        data = response.json()
-        return data[crypto][base_currency]
-    
-    # Second source: CoinMarketCap API
+def get_current_price(crypto_name, crypto_symbol, base_currency, coinmarketcap_api_key):
+    # First source: CoinMarketCap API
     url_coinmarketcap = f'https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest'
     params_coinmarketcap = {
-        'symbol': crypto.upper(),
+        'symbol': crypto_symbol.upper(),
         'convert': base_currency.upper()
     }
     headers = {
-        'X-CMC_PRO_API_KEY': 'your_coinmarketcap_api_key'
+        'X-CMC_PRO_API_KEY': coinmarketcap_api_key
     }
     response = requests.get(url_coinmarketcap, headers=headers, params=params_coinmarketcap)
     if response.status_code == 200:
         data = response.json()
-        return data['data'][crypto.upper()]['quote'][base_currency.upper()]['price']
+        return data['data'][crypto_symbol.upper()]['quote'][base_currency.upper()]['price']
+    
+    # Second source: CoinGecko API
+    url_coingecko = f'https://api.coingecko.com/api/v3/simple/price'
+    params_coingecko = {
+        'ids': crypto_name.lower(),
+        'vs_currencies': base_currency.lower()
+    }
+    response = requests.get(url_coingecko, params=params_coingecko)
+    if response.status_code == 200:
+        data = response.json()
+        return data[crypto_name][base_currency]
     
     # If both sources fail, return None
     return None
@@ -98,14 +99,11 @@ def buy_sell(prices, rsi_values, usd_balance, crypto_balance, crypto, base_curre
 
     return usd_balance, crypto_balance
 
-def main(crypto, base_currency, usd_balance, crypto_balance):
-    # Initialize prices and RSI values
+def main(crypto_name, crypto_symbol, base_currency, usd_balance, crypto_balance, coinmarketcap_api_key):
     prices = np.array([])
     rsi_values = np.array([])
-
-    # Main loop
     while True:
-        price = get_current_price(crypto, base_currency)
+        price = get_current_price(crypto_name, crypto_symbol, base_currency, coinmarketcap_api_key)
         if price:
             prices = np.append(prices, price)
             # Calculate RSI only if there are enough prices
@@ -115,7 +113,7 @@ def main(crypto, base_currency, usd_balance, crypto_balance):
                 else:
                     rsi_values = update_rsi(prices, rsi_values)
                 usd_balance, crypto_balance = buy_sell(prices, rsi_values, usd_balance, crypto_balance, crypto, base_currency)
-            print(f'Current price of {crypto}: {price} {base_currency} - USD Balance: {usd_balance}, Crypto Balance: {crypto_balance}')
+            print(f'Current price of {crypto_name}: {price} {base_currency} - USD Balance: {usd_balance}, Crypto Balance: {crypto_balance}')
             # Sleep for 5 minutes
             time.sleep(300)
         else:
@@ -123,9 +121,18 @@ def main(crypto, base_currency, usd_balance, crypto_balance):
             break
 
 if __name__ == '__main__':
-    crypto = 'ethereum'
+    parser = argparse.ArgumentParser(description='Crypto Price Tracker')
+    parser.add_argument('-keys_file', type=str, required=True, help='Path to the file containing the CoinMarketCap API key')
+    args = parser.parse_args()
+
+    # Read the API key from the specified file
+    with open(args.keys_file, 'r') as file:
+        coinmarketcap_api_key = file.read().strip()
+
+    crypto_name = 'ethereum'
+    crypto_symbol = 'eth'
     base_currency = 'usd'
     usd_balance = 1000
     crypto_balance = 0
 
-    main(crypto, base_currency, usd_balance, crypto_balance)
+    main(crypto_name, crypto_symbol, base_currency, usd_balance, crypto_balance, coinmarketcap_api_key)
