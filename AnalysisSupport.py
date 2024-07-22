@@ -1,3 +1,5 @@
+import numpy as np
+
 def rsi(prices, period=14):
     deltas = np.diff(prices)
     seed = deltas[:period]
