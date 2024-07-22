@@ -18,10 +18,10 @@ def main(crypto_name, crypto_symbol, base_currency, usd_balance, crypto_balance,
                     rsi_values = rsi(prices)
                 else:
                     rsi_values = update_rsi(prices, rsi_values)
-                usd_balance, crypto_balance = buy_sell(prices, rsi_values, usd_balance, crypto_balance, crypto, base_currency)
+                usd_balance, crypto_balance = buy_sell(prices, rsi_values, usd_balance, crypto_balance, crypto_name, base_currency)
             print(f'Current price of {crypto_name}: {price} {base_currency} - USD Balance: {usd_balance}, Crypto Balance: {crypto_balance}')
             # Sleep for 1 minutes
-            time.sleep(60)
+            time.sleep(30)
         else:
             print("Could not get current price.")
             break
@@ -66,7 +66,7 @@ if __name__ == '__main__':
     print(f'Crypto Symbol: {crypto_symbol}')
 
     # Get Binance account wallet cash balance
-    binance_balance = get_binance_balance(binance_api_key, binance_api_secret)
-    print(f'Binance Wallet Cash Balance: {binance_balance} USDT')
+    binance_balance_ustd = get_binance_balance(binance_api_key, binance_api_secret)
+    print(f'Binance Wallet Cash Balance: {binance_balance_ustd} USDT')
 
     main(crypto_name, crypto_symbol, base_currency, usd_balance, crypto_balance, coinmarketcap_api_key)

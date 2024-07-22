@@ -29,18 +29,18 @@ def get_current_price(crypto_name, crypto_symbol, base_currency, coinmarketcap_a
     # If both sources fail, return None
     return None
 
-def buy_sell(prices, rsi_values, usd_balance, crypto_balance, crypto, base_currency):
+def buy_sell(prices, rsi_values, usd_balance, crypto_balance, crypto_name, base_currency):
     if rsi_values[-1] < 30 and usd_balance > 0:
         # Buy
         price = prices[-1]
         crypto_balance += usd_balance / price
         usd_balance = 0
-        print(f'Buy {crypto} at {price} {base_currency}')
+        print(f'Buy {crypto_name} at {price} {base_currency}')
     elif rsi_values[-1] > 70 and crypto_balance > 0:
         # Sell
         price = prices[-1]
         usd_balance += crypto_balance * price
         crypto_balance = 0
-        print(f'Sell all {crypto} at {price} {base_currency}')
+        print(f'Sell all {crypto_name} at {price} {base_currency}')
 
     return usd_balance, crypto_balance
