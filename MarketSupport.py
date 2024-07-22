@@ -41,19 +41,3 @@ def get_current_price_binance(crypto_symbol, base_currency, binance_api_key=None
     except Exception as e:
         print(f"Error fetching data from Binance: {e}")
         return None
-
-def buy_sell(prices, rsi_values, usd_balance, crypto_balance, crypto_name, base_currency):
-    if rsi_values[-1] < 30 and usd_balance > 0:
-        # Buy
-        price = prices[-1]
-        crypto_balance += usd_balance / price
-        usd_balance = 0
-        print(f'Buy {crypto_name} at {price} {base_currency}')
-    elif rsi_values[-1] > 70 and crypto_balance > 0:
-        # Sell
-        price = prices[-1]
-        usd_balance += crypto_balance * price
-        crypto_balance = 0
-        print(f'Sell all {crypto_name} at {price} {base_currency}')
-
-    return usd_balance, crypto_balance

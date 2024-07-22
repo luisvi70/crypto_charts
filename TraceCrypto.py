@@ -2,8 +2,32 @@ import numpy as np
 import time
 import argparse
 from AnalysisSupport import rsi, update_rsi
-from MarketSupport import get_current_price_coinmarketcap, get_current_price_coingecko, get_current_price_binance, buy_sell
+from MarketSupport import get_current_price_coinmarketcap, get_current_price_coingecko, get_current_price_binance
 from binance.client import Client
+
+def buy_sell(prices, rsi_values, usd_balance, crypto_balance, crypto_name, base_currency):
+    action = None
+
+    if rsi_values[-1] < 30 and usd_balance > 0:
+        # Buy
+        price = prices[-1]
+        crypto_balance += usd_balance / price
+        usd_balance = 0
+        print(f'Buy {crypto_name} at {price} {base_currency}')
+        action = 'buy'
+    elif rsi_values[-1] > 70 and crypto_balance > 0:
+        # Sell
+        price = prices[-1]
+        usd_balance += crypto_balance * price
+        crypto_balance = 0
+        print(f'Sell all {crypto_name} at {price} {base_currency}')
+        action = 'sell'
+
+    if action:
+        with open(f'crypto_trading_{crypto_name}.csv', 'a') as file:
+            file.write(f'{time.strftime("%Y-%m-%d %H:%M:%S")},{price},{rsi_values[-1]},{usd_balance},{crypto_balance}\n')
+
+    return usd_balance, crypto_balance
 
 def main(crypto_name, crypto_symbol, base_currency, usd_balance, crypto_balance, coinmarketcap_api_key):
     prices = np.array([])
@@ -21,7 +45,7 @@ def main(crypto_name, crypto_symbol, base_currency, usd_balance, crypto_balance,
                 usd_balance, crypto_balance = buy_sell(prices, rsi_values, usd_balance, crypto_balance, crypto_name, base_currency)
             print(f'Current price of {crypto_name}: {price} {base_currency} - USD Balance: {usd_balance}, Crypto Balance: {crypto_balance}')
             # Sleep for 1 minutes
-            time.sleep(10)
+            time.sleep(60)
         else:
             print("Could not get current price.")
             break
