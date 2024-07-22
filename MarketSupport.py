@@ -1,7 +1,8 @@
 import requests
+from binance.client import Client
 
-def get_current_price(crypto_name, crypto_symbol, base_currency, coinmarketcap_api_key):
-    # First source: CoinMarketCap API
+def get_current_price_coinmarketcap(crypto_symbol, base_currency, coinmarketcap_api_key):
+    # Market source: CoinMarketCap API
     url_coinmarketcap = f'https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest'
     params_coinmarketcap = {
         'symbol': crypto_symbol.upper(),
@@ -14,8 +15,10 @@ def get_current_price(crypto_name, crypto_symbol, base_currency, coinmarketcap_a
     if response.status_code == 200:
         data = response.json()
         return data['data'][crypto_symbol.upper()]['quote'][base_currency.upper()]['price']
-    
-    # Second source: CoinGecko API
+    return None
+
+def get_current_price_coingecko(crypto_name, base_currency):
+    # Market source: CoinGecko API
     url_coingecko = f'https://api.coingecko.com/api/v3/simple/price'
     params_coingecko = {
         'ids': crypto_name.lower(),
@@ -28,6 +31,16 @@ def get_current_price(crypto_name, crypto_symbol, base_currency, coinmarketcap_a
     
     # If both sources fail, return None
     return None
+
+def get_current_price_binance(crypto_symbol, base_currency, binance_api_key=None, binance_api_secret=None):
+    client = Client(binance_api_key, binance_api_secret)
+    symbol = f"{crypto_symbol.upper()}{base_currency.upper()}"
+    try:
+        ticker = client.get_symbol_ticker(symbol=symbol)
+        return float(ticker['price'])
+    except Exception as e:
+        print(f"Error fetching data from Binance: {e}")
+        return None
 
 def buy_sell(prices, rsi_values, usd_balance, crypto_balance, crypto_name, base_currency):
     if rsi_values[-1] < 30 and usd_balance > 0:

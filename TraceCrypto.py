@@ -2,14 +2,14 @@ import numpy as np
 import time
 import argparse
 from AnalysisSupport import rsi, update_rsi
-from MarketSupport import get_current_price, buy_sell
+from MarketSupport import get_current_price_coinmarketcap, get_current_price_coingecko, get_current_price_binance, buy_sell
 from binance.client import Client
 
 def main(crypto_name, crypto_symbol, base_currency, usd_balance, crypto_balance, coinmarketcap_api_key):
     prices = np.array([])
     rsi_values = np.array([])
     while True:
-        price = get_current_price(crypto_name, crypto_symbol, base_currency, coinmarketcap_api_key)
+        price = get_current_price_binance(crypto_symbol, "USDT", binance_api_key=None, binance_api_secret=None)
         if price:
             prices = np.append(prices, price)
             # Calculate RSI only if there are enough prices
@@ -21,7 +21,7 @@ def main(crypto_name, crypto_symbol, base_currency, usd_balance, crypto_balance,
                 usd_balance, crypto_balance = buy_sell(prices, rsi_values, usd_balance, crypto_balance, crypto_name, base_currency)
             print(f'Current price of {crypto_name}: {price} {base_currency} - USD Balance: {usd_balance}, Crypto Balance: {crypto_balance}')
             # Sleep for 1 minutes
-            time.sleep(30)
+            time.sleep(10)
         else:
             print("Could not get current price.")
             break
