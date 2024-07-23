@@ -4,23 +4,97 @@ import argparse
 from AnalysisSupport import rsi, update_rsi
 from MarketSupport import get_current_price_coinmarketcap, get_current_price_coingecko, get_current_price_binance
 from binance.client import Client
+import math
 
-def buy_sell(prices, rsi_values, usd_balance, crypto_balance, crypto_name, base_currency):
+usd_balance_left = 0.0
+crypto_balance_left = 0.0
+min_qty, max_qty, step_size = 0.0, 0.0, 0.0
+
+def execute_binance_buy_order(api_key, api_secret, symbol, quantity, price):
+    client = Client(api_key, api_secret)
+    order = client.create_order(
+        symbol=symbol,
+        side=Client.SIDE_BUY,
+        type=Client.ORDER_TYPE_LIMIT,
+        timeInForce=Client.TIME_IN_FORCE_GTC,
+        quantity=quantity,
+        price=price
+    )
+    # Wait and verify that order has been executed
+    time.sleep(5)
+    order_status = client.get_order(symbol=symbol, orderId=order['orderId'])
+    while order_status['status'] != 'FILLED':
+        time.sleep(5)
+        order_status = client.get_order(symbol=symbol, orderId=order['orderId'])
+    return order
+
+def execute_binance_sell_order(api_key, api_secret, symbol, quantity, price):
+    client = Client(api_key, api_secret)
+    order = client.create_order(
+        symbol=symbol,
+        side=Client.SIDE_SELL,
+        type=Client.ORDER_TYPE_LIMIT,
+        timeInForce=Client.TIME_IN_FORCE_GTC,
+        quantity=quantity,
+        price=price
+    )
+    # Wait and verify that order has been executed
+    time.sleep(5)
+    order_status = client.get_order(symbol=symbol, orderId=order['orderId'])
+    while order_status['status'] != 'FILLED':
+        time.sleep(5)
+        order_status = client.get_order(symbol=symbol, orderId=order['orderId'])
+    return order
+
+def get_binance_balance(api_key, api_secret, asset):
+    client = Client(api_key, api_secret)
+    account_info = client.get_account()
+    for balance in account_info['balances']:
+        if balance['asset'] == asset:
+            return float(balance['free'])
+    return 0.0
+
+def get_binance_lot_size(client, symbol):
+    exchange_info = client.get_exchange_info()
+    for s in exchange_info['symbols']:
+        if s['symbol'] == symbol:
+            for f in s['filters']:
+                if f['filterType'] == 'LOT_SIZE':
+                    return float(f['minQty']), float(f['maxQty']), float(f['stepSize'])
+    return None, None, None
+
+def buy_sell(price_last, rsi_values, usd_balance, crypto_balance, crypto_symbol, crypto_name, base_currency, binance_api_key, binance_api_secret):
+    global usd_balance_left, crypto_balance_left
+    global min_qty, max_qty, step_size
+
     action = None
 
-    if rsi_values[-1] < 30 and usd_balance > 0:
-        # Buy
-        price = prices[-1]
-        crypto_balance += usd_balance / price
-        usd_balance = 0
-        print(f'Buy {crypto_name} at {price} {base_currency}')
+    if rsi_values[-1] < 30 and math.floor(usd_balance) > usd_balance_left:
+        # Buy Crypto
+        price = price_last
+        # Calculate buy order quantity
+        quantity = usd_balance / price
+        # Round down quantity to 5 decimal places
+        quantity = math.floor(quantity * 10**5) / 10**5
+        print(f'Buy {quantity} {crypto_name} at {price} {base_currency}')
+        execute_binance_buy_order(binance_api_key, binance_api_secret, f'{crypto_symbol.upper()}USDT', quantity, price)
+        # Update crypto_balance and usd_balance
+        crypto_balance = get_binance_balance(binance_api_key, binance_api_secret, crypto_symbol.upper())
+        usd_balance = get_binance_balance(binance_api_key, binance_api_secret, 'USDT')
+        usd_balance_left = usd_balance
+        
         action = 'buy'
-    elif rsi_values[-1] > 70 and crypto_balance > 0:
-        # Sell
-        price = prices[-1]
-        usd_balance += crypto_balance * price
-        crypto_balance = 0
-        print(f'Sell all {crypto_name} at {price} {base_currency}')
+    elif rsi_values[-1] > 70 and (math.floor(crypto_balance * 10**5) / 10**5) > crypto_balance_left:
+        # Sell Crypto
+        price = price_last
+        # Round down to 5 decimal places
+        crypto_to_sell = math.floor(crypto_balance * 10**5) / 10**5
+        print(f'Sell {crypto_to_sell} {crypto_name} at {price} {base_currency}')
+        execute_binance_sell_order(binance_api_key, binance_api_secret, f'{crypto_symbol.upper()}USDT', crypto_to_sell, price)
+        # Update crypto_balance and usd_balance
+        crypto_balance = get_binance_balance(binance_api_key, binance_api_secret, crypto_symbol.upper())
+        usd_balance = get_binance_balance(binance_api_key, binance_api_secret, 'USDT')
+        crypto_balance_left = crypto_balance
         action = 'sell'
 
     if action:
@@ -29,34 +103,48 @@ def buy_sell(prices, rsi_values, usd_balance, crypto_balance, crypto_name, base_
 
     return usd_balance, crypto_balance
 
-def main(crypto_name, crypto_symbol, base_currency, usd_balance, crypto_balance, coinmarketcap_api_key):
+def main(crypto_name, crypto_symbol, base_currency, usd_balance, crypto_balance, coinmarketcap_api_key, binance_api_key, binance_api_secret):
+    global usd_balance_left, crypto_balance_left
+    
     prices = np.array([])
     rsi_values = np.array([])
-    while True:
-        price = get_current_price_binance(crypto_symbol, "USDT", binance_api_key=None, binance_api_secret=None)
-        if price:
-            prices = np.append(prices, price)
+
+    # Define the target balance (5% gain)
+    target_balance = usd_balance * 1.05
+
+    while usd_balance <= target_balance:
+        # Calculate price average over 5 minutes to calculate RSI
+        price_tmp = 0
+        price_last = 0
+        count = 0
+        for i in range(5):
+            price = get_current_price_binance(crypto_symbol, "USDT", binance_api_key, binance_api_secret)
+            if price:
+                price_tmp += price
+                price_last = price
+                count += 1
+            else:
+                print("Could not get current price.")
+                break
+            time.sleep(60)
+
+        if price_tmp > 0  and count > 0:
+            # Calculate the average price
+            price_avg = price_tmp / count
+            prices = np.append(prices, price_avg)
             # Calculate RSI only if there are enough prices
             if len(prices) > 14:
                 if len(rsi_values) == 0:
                     rsi_values = rsi(prices)
                 else:
                     rsi_values = update_rsi(prices, rsi_values)
-                usd_balance, crypto_balance = buy_sell(prices, rsi_values, usd_balance, crypto_balance, crypto_name, base_currency)
-            print(f'Current price of {crypto_name}: {price} {base_currency} - USD Balance: {usd_balance}, Crypto Balance: {crypto_balance}')
-            # Sleep for 1 minutes
-            time.sleep(60)
+                usd_balance, crypto_balance = buy_sell(price_last, rsi_values, usd_balance, crypto_balance, crypto_symbol, crypto_name, base_currency, binance_api_key, binance_api_secret)
+            print(f'Current price of {crypto_name}: {price_last} {base_currency} - USD Balance: {usd_balance}, Crypto Balance: {crypto_balance}')
         else:
             print("Could not get current price.")
             break
 
-def get_binance_balance(api_key, api_secret, asset='USDT'):
-    client = Client(api_key, api_secret)
-    account_info = client.get_account()
-    for balance in account_info['balances']:
-        if balance['asset'] == asset:
-            return float(balance['free'])
-    return 0.0
+    print(f'Target balance reached: {target_balance} USD')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Crypto Price Tracker')
@@ -80,7 +168,6 @@ if __name__ == '__main__':
     crypto_name = args.crypto_name
     crypto_symbol = args.crypto_symbol
     base_currency = 'usd'
-    usd_balance = 1000
     crypto_balance = 0
 
     print(f'CoinMarketCap API Key: {coinmarketcap_api_key}')
@@ -89,8 +176,17 @@ if __name__ == '__main__':
     print(f'Crypto Name: {crypto_name}')
     print(f'Crypto Symbol: {crypto_symbol}')
 
+    # Initialize the Binance client
+    client = Client(binance_api_key, binance_api_secret)
+
+    # Get LOT_SIZE filter for BTCUSDT
+    min_qty, max_qty, step_size = get_binance_lot_size(client, 'BTCUSDT')
+    print(f'LOT_SIZE filter for BTCUSDT: Min Qty: {min_qty}, Max Qty: {max_qty}, Step Size: {step_size}')
+
     # Get Binance account wallet cash balance
-    binance_balance_ustd = get_binance_balance(binance_api_key, binance_api_secret)
+    binance_balance_ustd = get_binance_balance(binance_api_key, binance_api_secret, 'USDT')
+    usd_balance = binance_balance_ustd
+    crypto_balance = get_binance_balance(binance_api_key, binance_api_secret, 'BTC')
     print(f'Binance Wallet Cash Balance: {binance_balance_ustd} USDT')
 
-    main(crypto_name, crypto_symbol, base_currency, usd_balance, crypto_balance, coinmarketcap_api_key)
+    main(crypto_name, crypto_symbol, base_currency, usd_balance, crypto_balance, coinmarketcap_api_key, binance_api_key, binance_api_secret)
