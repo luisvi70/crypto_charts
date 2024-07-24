@@ -9,10 +9,15 @@ import requests.exceptions
 
 usd_balance_left = 0.0
 crypto_balance_left = 0.0
+client = None
 
-def execute_binance_buy_order(api_key, api_secret, symbol, quantity, price):
-    client = Client(api_key, api_secret)
+def execute_binance_buy_order(client, symbol, quantity, price):
+    fail_count = 0
     while True:
+        if fail_count > 3:
+            print("Failed to execute buy order after 3 attempts.")
+            # Stop script execution
+            exit(1)
         try:
             order = client.create_order(
                 symbol=symbol,
@@ -30,15 +35,21 @@ def execute_binance_buy_order(api_key, api_secret, symbol, quantity, price):
                 order_status = client.get_order(symbol=symbol, orderId=order['orderId'])
             return order
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+            fail_count += 1
             print(f"Network error occurred: {e}. Retrying in 5 seconds...")
             time.sleep(5)
         except Exception as e:
+            fail_count += 1
             print(f"An unexpected error occurred: {e}. Retrying in 5 seconds...")
             time.sleep(5)
 
-def execute_binance_sell_order(api_key, api_secret, symbol, quantity, price):
-    client = Client(api_key, api_secret)
+def execute_binance_sell_order(client, symbol, quantity, price):
+    fail_count = 0
     while True:
+        if fail_count > 3:
+            print("Failed to execute sell order after 3 attempts.")
+            # Stop script execution
+            exit(1)
         try:
             order = client.create_order(
                 symbol=symbol,
@@ -56,15 +67,21 @@ def execute_binance_sell_order(api_key, api_secret, symbol, quantity, price):
                 order_status = client.get_order(symbol=symbol, orderId=order['orderId'])
             return order
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+            fail_count += 1
             print(f"Network error occurred: {e}. Retrying in 5 seconds...")
             time.sleep(5)
         except Exception as e:
+            fail_count += 1
             print(f"An unexpected error occurred: {e}. Retrying in 5 seconds...")
             time.sleep(5)
 
-def get_binance_balance(api_key, api_secret, asset):
-    client = Client(api_key, api_secret)
+def get_binance_balance(client, asset):
+    fail_count = 0
     while True:
+        if fail_count > 10:
+            print("Failed to get balance after 10 attempts.")
+            # Stop script execution
+            exit(1)
         try:
             account_info = client.get_account()
             for balance in account_info['balances']:
@@ -72,14 +89,16 @@ def get_binance_balance(api_key, api_secret, asset):
                     return float(balance['free'])
             return 0.0
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+            fail_count += 1
             print(f"Network error occurred: {e}. Retrying in 5 seconds...")
-            time.sleep(5)
+            time.sleep(10)
         except Exception as e:
+            fail_count += 1
             print(f"An unexpected error occurred: {e}. Retrying in 5 seconds...")
-            time.sleep(5)
+            time.sleep(10)
 
 def buy_sell(price_last, rsi_values, usd_balance, crypto_balance, crypto_symbol, crypto_name, base_currency, binance_api_key, binance_api_secret):
-    global usd_balance_left, crypto_balance_left
+    global client, usd_balance_left, crypto_balance_left
 
     action = None
 
@@ -91,10 +110,10 @@ def buy_sell(price_last, rsi_values, usd_balance, crypto_balance, crypto_symbol,
         # Round down quantity to 5 decimal places
         quantity = math.floor(quantity * 10**5) / 10**5
         print(f'Buy {quantity} {crypto_name} at {price} {base_currency}')
-        execute_binance_buy_order(binance_api_key, binance_api_secret, f'{crypto_symbol.upper()}USDT', quantity, price)
+        execute_binance_buy_order(client, f'{crypto_symbol.upper()}USDT', quantity, price)
         # Update crypto_balance and usd_balance
-        crypto_balance = get_binance_balance(binance_api_key, binance_api_secret, crypto_symbol.upper())
-        usd_balance = get_binance_balance(binance_api_key, binance_api_secret, 'USDT')
+        crypto_balance = get_binance_balance(client, crypto_symbol.upper())
+        usd_balance = get_binance_balance(client, 'USDT')
         usd_balance_left = usd_balance
         
         action = 'buy'
@@ -104,10 +123,10 @@ def buy_sell(price_last, rsi_values, usd_balance, crypto_balance, crypto_symbol,
         # Round down to 5 decimal places
         crypto_to_sell = math.floor(crypto_balance * 10**5) / 10**5
         print(f'Sell {crypto_to_sell} {crypto_name} at {price} {base_currency}')
-        execute_binance_sell_order(binance_api_key, binance_api_secret, f'{crypto_symbol.upper()}USDT', crypto_to_sell, price)
+        execute_binance_sell_order(client, f'{crypto_symbol.upper()}USDT', crypto_to_sell, price)
         # Update crypto_balance and usd_balance
-        crypto_balance = get_binance_balance(binance_api_key, binance_api_secret, crypto_symbol.upper())
-        usd_balance = get_binance_balance(binance_api_key, binance_api_secret, 'USDT')
+        crypto_balance = get_binance_balance(client, crypto_symbol.upper())
+        usd_balance = get_binance_balance(client, 'USDT')
         crypto_balance_left = crypto_balance
         action = 'sell'
 
@@ -118,7 +137,7 @@ def buy_sell(price_last, rsi_values, usd_balance, crypto_balance, crypto_symbol,
     return usd_balance, crypto_balance
 
 def main(args):
-    global usd_balance_left, crypto_balance_left
+    global client, usd_balance_left, crypto_balance_left
 
     # Initialize some variables
     base_currency = 'usd'
@@ -141,6 +160,9 @@ def main(args):
     # Assuming the Binance API key file contains both the API key and secret separated by a newline
     binance_api_key, binance_api_secret = binance_api_key.split('\n')
 
+    # Get the Binance client
+    client = Client(binance_api_key, binance_api_secret)
+
     print(f'CoinMarketCap API Key: {coinmarketcap_api_key}')
     print(f'Binance HMAC API Key: {binance_api_key}')
     print(f'Binance HMAC API Secret: {binance_api_secret}')
@@ -148,9 +170,9 @@ def main(args):
     print(f'Crypto Symbol: {crypto_symbol}')
 
     # Get Binance account wallet balances
-    binance_balance_ustd = get_binance_balance(binance_api_key, binance_api_secret, 'USDT')
+    binance_balance_ustd = get_binance_balance(client, 'USDT')
     usd_balance = binance_balance_ustd
-    crypto_balance = get_binance_balance(binance_api_key, binance_api_secret, 'BTC')
+    crypto_balance = get_binance_balance(client, 'BTC')
     print(f'Binance Wallet Cash Balance: {binance_balance_ustd} USDT')
 
     # Define the target balance (5% gain)
@@ -162,7 +184,7 @@ def main(args):
         price_last = 0
         count = 0
         for i in range(price_avg_period):
-            price = get_current_price_binance(crypto_symbol, "USDT", binance_api_key, binance_api_secret)
+            price = get_current_price_binance(client, crypto_symbol, "USDT")
             if price:
                 price_tmp += price
                 price_last = price
@@ -200,4 +222,3 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     main(args)
-    

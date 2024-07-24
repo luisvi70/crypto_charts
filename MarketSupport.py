@@ -32,8 +32,7 @@ def get_current_price_coingecko(crypto_name, base_currency):
     # If both sources fail, return None
     return None
 
-def get_current_price_binance(crypto_symbol, base_currency, binance_api_key=None, binance_api_secret=None):
-    client = Client(binance_api_key, binance_api_secret)
+def get_current_price_binance(client, crypto_symbol, base_currency):
     symbol = f"{crypto_symbol.upper()}{base_currency.upper()}"
     try:
         ticker = client.get_symbol_ticker(symbol=symbol)
