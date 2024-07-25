@@ -3,99 +3,13 @@ import time
 import argparse
 from AnalysisSupport import rsi, update_rsi
 from MarketSupport import get_current_price_coinmarketcap, get_current_price_coingecko, get_current_price_binance
+from BinanceSupport import execute_binance_buy_order, execute_binance_sell_order, fetch_historical_data, get_binance_balance, verify_current_moving_averages
 from binance.client import Client
 import math
-import requests.exceptions
 
 usd_balance_left = 0.0
 crypto_balance_left = 0.0
 client = None
-
-def execute_binance_buy_order(client, symbol, quantity, price):
-    fail_count = 0
-    while True:
-        if fail_count > 3:
-            print("Failed to execute buy order after 3 attempts.")
-            # Stop script execution
-            exit(1)
-        try:
-            order = client.create_order(
-                symbol=symbol,
-                side=Client.SIDE_BUY,
-                type=Client.ORDER_TYPE_LIMIT,
-                timeInForce=Client.TIME_IN_FORCE_GTC,
-                quantity=quantity,
-                price=price
-            )
-            # Wait and verify that order has been executed
-            time.sleep(5)
-            order_status = client.get_order(symbol=symbol, orderId=order['orderId'])
-            while order_status['status'] != 'FILLED':
-                time.sleep(5)
-                order_status = client.get_order(symbol=symbol, orderId=order['orderId'])
-            return order
-        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
-            fail_count += 1
-            print(f"Network error occurred: {e}. Retrying in 5 seconds...")
-            time.sleep(5)
-        except Exception as e:
-            fail_count += 1
-            print(f"An unexpected error occurred: {e}. Retrying in 5 seconds...")
-            time.sleep(5)
-
-def execute_binance_sell_order(client, symbol, quantity, price):
-    fail_count = 0
-    while True:
-        if fail_count > 3:
-            print("Failed to execute sell order after 3 attempts.")
-            # Stop script execution
-            exit(1)
-        try:
-            order = client.create_order(
-                symbol=symbol,
-                side=Client.SIDE_SELL,
-                type=Client.ORDER_TYPE_LIMIT,
-                timeInForce=Client.TIME_IN_FORCE_GTC,
-                quantity=quantity,
-                price=price
-            )
-            # Wait and verify that order has been executed
-            time.sleep(5)
-            order_status = client.get_order(symbol=symbol, orderId=order['orderId'])
-            while order_status['status'] != 'FILLED':
-                time.sleep(5)
-                order_status = client.get_order(symbol=symbol, orderId=order['orderId'])
-            return order
-        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
-            fail_count += 1
-            print(f"Network error occurred: {e}. Retrying in 5 seconds...")
-            time.sleep(5)
-        except Exception as e:
-            fail_count += 1
-            print(f"An unexpected error occurred: {e}. Retrying in 5 seconds...")
-            time.sleep(5)
-
-def get_binance_balance(client, asset):
-    fail_count = 0
-    while True:
-        if fail_count > 10:
-            print("Failed to get balance after 10 attempts.")
-            # Stop script execution
-            exit(1)
-        try:
-            account_info = client.get_account()
-            for balance in account_info['balances']:
-                if balance['asset'] == asset:
-                    return float(balance['free'])
-            return 0.0
-        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
-            fail_count += 1
-            print(f"Network error occurred: {e}. Retrying in 5 seconds...")
-            time.sleep(10)
-        except Exception as e:
-            fail_count += 1
-            print(f"An unexpected error occurred: {e}. Retrying in 5 seconds...")
-            time.sleep(10)
 
 def buy_sell(price_last, rsi_values, usd_balance, crypto_balance, crypto_symbol, crypto_name, base_currency, binance_api_key, binance_api_secret):
     global client, usd_balance_left, crypto_balance_left
@@ -103,7 +17,8 @@ def buy_sell(price_last, rsi_values, usd_balance, crypto_balance, crypto_symbol,
     action = None
 
     if rsi_values[-1] < 30 and math.floor(usd_balance) > usd_balance_left:
-        # Buy Crypto
+        # RSI Indicates oversold condition - Buy Crypto
+        # Default rsi threshold is 30
         price = price_last
         # Calculate buy order quantity
         quantity = usd_balance / price
@@ -118,7 +33,8 @@ def buy_sell(price_last, rsi_values, usd_balance, crypto_balance, crypto_symbol,
         
         action = 'buy'
     elif rsi_values[-1] > 70 and (math.floor(crypto_balance * 10**5) / 10**5) > crypto_balance_left:
-        # Sell Crypto
+        # RSI Indicates overbought condition - Sell Crypto
+        # Default rsi threshold is 70
         price = price_last
         # Round down to 5 decimal places
         crypto_to_sell = math.floor(crypto_balance * 10**5) / 10**5
@@ -131,7 +47,7 @@ def buy_sell(price_last, rsi_values, usd_balance, crypto_balance, crypto_symbol,
         action = 'sell'
 
     if action:
-        with open(f'crypto_trading_{crypto_name}.csv', 'a') as file:
+        with open(f'logs/crypto_trading_{crypto_name}.csv', 'a') as file:
             file.write(f'{time.strftime("%Y-%m-%d %H:%M:%S")},{price},{rsi_values[-1]},{usd_balance},{crypto_balance}\n')
 
     return usd_balance, crypto_balance
@@ -177,6 +93,29 @@ def main(args):
 
     # Define the target balance (5% gain)
     target_balance = usd_balance * 1.05
+
+    # Call function verify_current_moving_averages to verify the current moving averages
+    # While result is False, keep calling the function every 5 minutes
+    # If the result is True, set a variable name allow_trading to True
+    allow_trading = False
+    while not allow_trading:
+        allow_trading = verify_current_moving_averages(client)
+        if not allow_trading:
+            print("Current moving averages do not meet the criteria. Retrying in 5 minutes...")
+            time.sleep(300)
+
+    # Fetch historical data
+    symbol = 'BTCUSDT'
+    interval = Client.KLINE_INTERVAL_1MINUTE
+    # Get the last hour of data
+    start_str = '1 hour ago UTC'
+    historical_data = fetch_historical_data(client, symbol, interval, start_str)
+
+    # Based on the price_avg_period calculate the average price on the historical data
+    # and populate the prices array with the average prices
+    for i in range(0, len(historical_data), price_avg_period):
+        price_avg = historical_data['close'][i:i+price_avg_period].mean()
+        prices = np.append(prices, price_avg)
 
     while usd_balance <= target_balance:
         # Collect price data for subsequent price average calculation
