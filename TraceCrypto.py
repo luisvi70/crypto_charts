@@ -107,15 +107,21 @@ def main(args):
     print(f'Crypto Name: {crypto_name}')
     print(f'Crypto Symbol: {crypto_symbol}')
 
-    # Get Binance account wallet balances
-    try:
-        binance_balance_ustd = get_binance_balance(client, 'USDT')
-        usd_balance = binance_balance_ustd
-        crypto_balance = get_binance_balance(client, 'BTC')
-        print(f'Binance Wallet Cash Balance: {binance_balance_ustd} USDT')
-    except Exception as e:
-        print(f"Error retrieving Binance balances: {e}")
-        exit(1)
+    # If running in test mode set test values for balances
+    if args.test:
+        usd_balance = 100.0
+        crypto_balance = 0.0
+        print(f'Test Mode: USD Balance: {usd_balance}, Crypto Balance: {crypto_balance}')
+    else:
+        # Get Binance account wallet balances
+        try:
+            binance_balance_ustd = get_binance_balance(client, 'USDT')
+            usd_balance = binance_balance_ustd
+            crypto_balance = get_binance_balance(client, 'BTC')
+            print(f'Binance Wallet Cash Balance: {binance_balance_ustd} USDT')
+        except Exception as e:
+            print(f"Error retrieving Binance balances: {e}")
+            exit(1)
 
     # Define the target balance (5% gain)
     target_balance = usd_balance * 1.05
@@ -196,6 +202,7 @@ if __name__ == '__main__':
     parser.add_argument('-crypto_name', type=str, default='bitcoin', help='Name of the cryptocurrency to track')
     parser.add_argument('-crypto_symbol', type=str, default='btc', help='Symbol of the cryptocurrency to track')
     parser.add_argument('-price_avg_period', type=int, default=5, help='Period of time (in minutes) to calculate the price average')
+    parser.add_argument('-test', action='store_true', help='Run the script in test mode')
     args = parser.parse_args()
 
     main(args)
