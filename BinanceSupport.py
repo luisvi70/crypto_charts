@@ -67,12 +67,20 @@ def execute_binance_sell_order(client, symbol, quantity, price):
             print(f"An unexpected error occurred: {e}. Retrying in 5 seconds...")
             time.sleep(5)
 
-# Function to fetch historical data
 def fetch_historical_data(client, symbol, interval, start_str):
-    klines = client.get_historical_klines(symbol, interval, start_str)
-    data = pd.DataFrame(klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_asset_volume', 'number_of_trades', 'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'])
-    data['close'] = data['close'].astype(float)
-    return data
+    try:
+        # Fetch historical klines from Binance
+        klines = client.get_historical_klines(symbol, interval, start_str)
+        # Convert to DataFrame
+        data = pd.DataFrame(klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_asset_volume', 'number_of_trades', 'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'])
+        # Convert timestamp to datetime
+        data['timestamp'] = pd.to_datetime(data['timestamp'], unit='ms')
+        # Convert close to float
+        data['close'] = data['close'].astype(float)
+        return data
+    except Exception as e:
+        print(f"Error fetching historical data: {e}")
+        return None
 
 def get_binance_balance(client, asset):
     fail_count = 0
@@ -103,6 +111,9 @@ def verify_current_moving_averages(client):
     
     # Fetch historical data
     historical_data_hr = fetch_historical_data(client, symbol, interval, start_str)
+    if historical_data_hr is None or len(historical_data_hr) < 99:
+        print("Not enough data to calculate moving averages.")
+        return False
     
     # Calculate moving averages
     historical_data_hr['MA99'] = historical_data_hr['close'].rolling(window=99).mean()
@@ -111,8 +122,11 @@ def verify_current_moving_averages(client):
     # Get the latest values of MA(99) and MA(25)
     latest_ma99 = historical_data_hr['MA99'].iloc[-1]
     latest_ma25 = historical_data_hr['MA25'].iloc[-1]
-    print(f"Latest MA(99): {latest_ma99}")
-    print(f"Latest MA(25): {latest_ma25}")
+    
+    # Check for NaN values
+    if pd.isna(latest_ma99) or pd.isna(latest_ma25):
+        print("Moving averages contain NaN values.")
+        return False
     
     # Compare and return the result
     return latest_ma25 > latest_ma99

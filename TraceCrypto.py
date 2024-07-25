@@ -11,8 +11,8 @@ usd_balance_left = 0.0
 crypto_balance_left = 0.0
 client = None
 
-def buy_sell(price_last, rsi_values, usd_balance, crypto_balance, crypto_symbol, crypto_name, base_currency, binance_api_key, binance_api_secret):
-    global client, usd_balance_left, crypto_balance_left
+def buy_sell(client, price_last, rsi_values, usd_balance, crypto_balance, crypto_symbol, crypto_name, base_currency):
+    global usd_balance_left, crypto_balance_left
 
     action = None
 
@@ -53,7 +53,7 @@ def buy_sell(price_last, rsi_values, usd_balance, crypto_balance, crypto_symbol,
     return usd_balance, crypto_balance
 
 def main(args):
-    global client, usd_balance_left, crypto_balance_left
+    global usd_balance_left, crypto_balance_left
 
     # Initialize some variables
     base_currency = 'usd'
@@ -144,7 +144,7 @@ def main(args):
                 else:
                     rsi_values = update_rsi(prices, rsi_values)
                 if allow_trading:
-                    usd_balance, crypto_balance = buy_sell(price_last, rsi_values, usd_balance, crypto_balance, crypto_symbol, crypto_name, base_currency, binance_api_key, binance_api_secret)
+                    usd_balance, crypto_balance = buy_sell(client, price_last, rsi_values, usd_balance, crypto_balance, crypto_symbol, crypto_name, base_currency)
             print(f'Current price of {crypto_name}: {price_last} {base_currency} (Avg: {price_avg}) - USD Balance: {usd_balance}, Crypto Balance: {crypto_balance}')
         else:
             print("Could not get current price.")
