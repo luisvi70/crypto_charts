@@ -143,11 +143,15 @@ def main(args):
                     rsi_values = rsi(prices)
                 else:
                     rsi_values = update_rsi(prices, rsi_values)
-                usd_balance, crypto_balance = buy_sell(price_last, rsi_values, usd_balance, crypto_balance, crypto_symbol, crypto_name, base_currency, binance_api_key, binance_api_secret)
+                if allow_trading:
+                    usd_balance, crypto_balance = buy_sell(price_last, rsi_values, usd_balance, crypto_balance, crypto_symbol, crypto_name, base_currency, binance_api_key, binance_api_secret)
             print(f'Current price of {crypto_name}: {price_last} {base_currency} (Avg: {price_avg}) - USD Balance: {usd_balance}, Crypto Balance: {crypto_balance}')
         else:
             print("Could not get current price.")
             break
+
+        # Verify the current moving averages to determine if trading is still allowed
+        allow_trading = verify_current_moving_averages(client)
 
     print(f'Target balance reached: {target_balance} USD')
 
