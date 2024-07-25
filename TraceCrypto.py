@@ -66,18 +66,40 @@ def main(args):
     rsi_values = np.array([])
 
     # Read the CoinMarketCap API key from the specified file
-    with open(args.keys_file, 'r') as file:
-        coinmarketcap_api_key = file.read().strip()
+    try:
+        with open(args.keys_file, 'r') as file:
+            coinmarketcap_api_key = file.read().strip()
+    except FileNotFoundError:
+        print(f"Error: The file {args.keys_file} was not found.")
+        exit(1)
+    except Exception as e:
+        print(f"Error reading {args.keys_file}: {e}")
+        exit(1)
 
     # Read the Binance HMAC API key from the specified file
-    with open(args.binance_key_file, 'r') as file:
-        binance_api_key = file.read().strip()
+    try:
+        with open(args.binance_key_file, 'r') as file:
+            binance_api_key = file.read().strip()
+    except FileNotFoundError:
+        print(f"Error: The file {args.binance_key_file} was not found.")
+        exit(1)
+    except Exception as e:
+        print(f"Error reading {args.binance_key_file}: {e}")
+        exit(1)
 
     # Assuming the Binance API key file contains both the API key and secret separated by a newline
-    binance_api_key, binance_api_secret = binance_api_key.split('\n')
+    try:
+        binance_api_key, binance_api_secret = binance_api_key.split('\n')
+    except ValueError:
+        print("Error: Binance key file format is incorrect. It should contain the API key and secret separated by a newline.")
+        exit(1)
 
     # Get the Binance client
-    client = Client(binance_api_key, binance_api_secret)
+    try:
+        client = Client(binance_api_key, binance_api_secret)
+    except Exception as e:
+        print(f"Error initializing Binance client: {e}")
+        exit(1)
 
     print(f'CoinMarketCap API Key: {coinmarketcap_api_key}')
     print(f'Binance HMAC API Key: {binance_api_key}')
@@ -86,10 +108,14 @@ def main(args):
     print(f'Crypto Symbol: {crypto_symbol}')
 
     # Get Binance account wallet balances
-    binance_balance_ustd = get_binance_balance(client, 'USDT')
-    usd_balance = binance_balance_ustd
-    crypto_balance = get_binance_balance(client, 'BTC')
-    print(f'Binance Wallet Cash Balance: {binance_balance_ustd} USDT')
+    try:
+        binance_balance_ustd = get_binance_balance(client, 'USDT')
+        usd_balance = binance_balance_ustd
+        crypto_balance = get_binance_balance(client, 'BTC')
+        print(f'Binance Wallet Cash Balance: {binance_balance_ustd} USDT')
+    except Exception as e:
+        print(f"Error retrieving Binance balances: {e}")
+        exit(1)
 
     # Define the target balance (5% gain)
     target_balance = usd_balance * 1.05
@@ -99,7 +125,11 @@ def main(args):
     # If the result is True, set a variable name allow_trading to True
     allow_trading = False
     while not allow_trading:
-        allow_trading = verify_current_moving_averages(client)
+        try:
+            allow_trading = verify_current_moving_averages(client)
+        except Exception as e:
+            print(f"Error verifying moving averages: {e}")
+            exit(1)
         if not allow_trading:
             print("Current moving averages do not meet the criteria. Retrying in 5 minutes...")
             time.sleep(300)
@@ -151,7 +181,11 @@ def main(args):
             break
 
         # Verify the current moving averages to determine if trading is still allowed
-        allow_trading = verify_current_moving_averages(client)
+        try:
+            allow_trading = verify_current_moving_averages(client)
+        except Exception as e:
+            print(f"Error verifying moving averages: {e}")
+            exit(1)
 
     print(f'Target balance reached: {target_balance} USD')
 
